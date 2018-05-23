@@ -9,9 +9,13 @@
 #define SRC_SOCKET_HANDLER_H_
 
 #include <sys/socket.h>
+#include "engine_structs.h"
 
 // opens a UPD socket and returns socket id
-int open_socket(int is_ipv4);
+void read_socket_event(int fd, short flags, void *ctx);
+void read_socket_packet(quic_engine_parameters* engine_ref);
+int open_socket(int is_ipv4, struct sockaddr_storage* out_local_addr_ref, int* socket_id_out_ref,
+                socklen_t* socket_buffer_size, int port_number);
 void close_socket(int socket_id);
 
 #endif /* SRC_SOCKET_HANDLER_H_ */

@@ -10,7 +10,7 @@
 
 #include "engine_structs.h"
 
-void quic_connect(quic_engine* quic_engine_ref, const char* url, int is_ipv4);
-void destroy(quic_engine* quic_engine_ref);
+void quic_connect(quic_engine_parameters* quic_engine_ref, const char* url);
+void destroy_connections(quic_engine_parameters *quic_engine_ref);
 
 #endif /* SRC_CONNECTION_ESTABLISHER_H_ */
