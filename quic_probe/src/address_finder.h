@@ -11,8 +11,10 @@
 #include <stddef.h>
 #include <sys/socket.h>
 #include "connection_params.h"
+#include "error_report.h"
 
-void parse_url(const char *url, parsed_url_t* parsed_url_out_ref);
-void get_sockaddr(const char* host_name, struct sockaddr_storage * address_ref_out, int is_ipv4);
+int parse_url(char *url, parsed_url_t* parsed_url_out_ref, error_report_t** error_ref_out);
+int get_sockaddr(const char* host_name, struct sockaddr_storage * address_ref_out, int is_ipv4,
+        error_report_t** error_ref_out);
 
 #endif /* SRC_ADDRESS_FINDER_H_ */

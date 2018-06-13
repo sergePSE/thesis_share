@@ -65,3 +65,7 @@ void* pull_stack_element(struct primitive_stack *primitive_stack_ref)
     free(node_ref);
     return data_ref;
 }
+
+uint get_stack_length(struct primitive_stack *stack_ref){
+    return stack_ref->elements_left;
+}

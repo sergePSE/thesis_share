@@ -9,14 +9,25 @@
 #include "connection_write_handler.h"
 #include "engine_structs.h"
 
+void try_fix_empty_path(text_t **path_ref)
+{
+    if ((*path_ref)->size == 0)
+    {
+        destroy_text(*path_ref);
+        *path_ref = init_text_from_const("/");
+    }
+}
+
+
 void send_header(stream_parameters_t* stream_ref, lsquic_stream_t *stream)
 {
     connection_parameters* connection = (connection_parameters*)stream_ref->connection_params_ref;
+    try_fix_empty_path(&stream_ref->path);
     lsquic_http_header_t headers_arr[] = {
             {
                     .name  = { ":authority",     10, },
-                    .value = { .iov_base = (void *) connection->hostname,
-                            .iov_len = connection->hostname_len },
+                    .value = { .iov_base = (void *) connection->hostname->text,
+                            .iov_len = connection->hostname->size },
             },
             {
                     .name  = { .iov_base = ":method",       .iov_len = 7, },
@@ -24,8 +35,8 @@ void send_header(stream_parameters_t* stream_ref, lsquic_stream_t *stream)
             },
             {
                     .name  = { .iov_base = ":path",         .iov_len = 5, },
-                    .value = { .iov_base = (void *) stream_ref->path,
-                            .iov_len = stream_ref->path_len },
+                    .value = { .iov_base = (void *) stream_ref->path->text,
+                            .iov_len = stream_ref->path->size },
             },
             {
                     .name  = { .iov_base = ":scheme",       .iov_len = 7, },
@@ -36,14 +47,14 @@ void send_header(stream_parameters_t* stream_ref, lsquic_stream_t *stream)
                     .value = { .iov_base = (void *) "*/*",   .iov_len = 3 },
             },
             // always redirects to youtube.com
-            {
-                    .name  = { .iov_base = "origin",         .iov_len = 6, },
-                    .value = { .iov_base = (void *) "https://www.youtube.com",   .iov_len = 23 },
-            },
-            {
-                    .name  = { .iov_base = "referer",         .iov_len = 7, },
-                    .value = { .iov_base = (void *) "https://www.youtube.com/",   .iov_len = 24 },
-            }
+//            {
+//                    .name  = { .iov_base = "origin",         .iov_len = 6, },
+//                    .value = { .iov_base = (void *) "https://www.youtube.com",   .iov_len = 23 },
+//            },
+//            {
+//                    .name  = { .iov_base = "referer",         .iov_len = 7, },
+//                    .value = { .iov_base = (void *) "https://www.youtube.com/",   .iov_len = 24 },
+//            }
     };
     lsquic_http_headers_t headers = {
             .count = sizeof(headers_arr) / sizeof(headers_arr[0]),
@@ -51,27 +62,25 @@ void send_header(stream_parameters_t* stream_ref, lsquic_stream_t *stream)
     };
     if (0 != lsquic_stream_send_headers(stream, &headers, 1))
     {
-        printf("cannot send headers: %s", strerror(errno));
+        report_stream_error(init_text_from_const("cannot send headers"), errno, stream_ref,
+                            init_text_from_const(__FILE__), __LINE__);
         return;
     }
 }
 
-void increment_engine_reading_streams(stream_parameters_t* stream)
-{
-    connection_parameters* connection = (connection_parameters*)stream->connection_params_ref;
-    quic_engine_parameters* engine = (quic_engine_parameters*)connection->quic_engine_params_ref;
-    engine->reading_streams_count++;
-}
 
 void http_client_on_write (lsquic_stream_t *stream, lsquic_stream_ctx_t *st_h)
 {
+    if (stream == NULL)
+        return;
     stream_parameters_t* stream_ref = (stream_parameters_t*) st_h;
+    // test
+    printf("stream on write:%s\n", stream_ref->data_pointer->final_url.url_data);
     if (stream_ref->is_header_sent)
     {
         // close stream and read all incoming packets
         lsquic_stream_shutdown(stream, 1);
         lsquic_stream_wantread(stream, 1);
-        increment_engine_reading_streams(stream_ref);
     }
     else
     {

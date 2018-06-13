@@ -6,59 +6,73 @@
 #include "engine_structs.h"
 #include "lsquic_types.h"
 
-#define ERROR_BUFFER_SIZE 100
+#include "event_handlers.h"
 
-void remove_connection(connection_parameters* connection)
+
+void run_connection_streams_timeout(connection_parameters *connection_parameters, quic_engine_parameters* quic_engine)
 {
-    free(connection->hostname);
-    destroy_simple_list(connection->stream_list);
-    quic_engine_parameters* engine = (quic_engine_parameters*)connection->quic_engine_params_ref;
-    remove_list_element_by_data(engine->connections, connection);
+
+    struct enumerator* list_enumerator = get_enumerator(connection_parameters->stream_list);
+    int stream_count = get_list_size(connection_parameters->stream_list);
+    for(stream_parameters_t* stream_parameters = get_next_element(list_enumerator); stream_parameters != NULL;
+            stream_parameters = get_next_element(list_enumerator))
+    {
+        text_t* error = init_text_from_const("timeout");
+        text_t* filename = init_text_from_const(__FILE__);
+        report_stream_error(error, 0, stream_parameters, filename, __LINE__);
+        quic_engine->reading_streams_count--;
+        lsquic_stream_close(stream_parameters->stream_ref);
+    }
+    if (stream_count > 0)
+        lsquic_conn_close(connection_parameters->connection_ref);
+    free(list_enumerator);
 }
 
-void clean_connections(struct simple_list* connection_list)
+void run_timeout(quic_engine_parameters* quic_engine_ref)
 {
-    char error_buffer[ERROR_BUFFER_SIZE];
-    struct enumerator* list_enumerator = get_enumerator(connection_list);
+    struct enumerator* list_enumerator = get_enumerator(quic_engine_ref->connections);
     for(connection_parameters* conn_parameters = get_next_element(list_enumerator); conn_parameters != NULL;
             conn_parameters = get_next_element(list_enumerator))
     {
-        enum LSQUIC_CONN_STATUS conn_status = lsquic_conn_status(conn_parameters->connection_ref, error_buffer,
-                ERROR_BUFFER_SIZE);
-        if(conn_status != LSCONN_ST_CONNECTED || conn_status != LSCONN_ST_HSK_IN_PROGRESS)
-        {
-            remove_connection(conn_parameters);
-        }
+        run_connection_streams_timeout(conn_parameters, quic_engine_ref);
+        lsquic_conn_close(conn_parameters->connection_ref);
     }
     free(list_enumerator);
 }
 
 void schedule_engine(quic_engine_parameters* quic_engine_ref)
 {
-    if (quic_engine_ref->urls_left == 0)
-    {
-        event_base_loopbreak(quic_engine_ref->events.event_base_ref);
-        return;
-    }
-
-    lsquic_engine_process_conns(quic_engine_ref->engine_ref);
-    int diff_ns;
     struct timeval timeout;
 
-    if (lsquic_engine_earliest_adv_tick(quic_engine_ref->engine_ref, &diff_ns))
-    {
-        timeout.tv_sec = (unsigned) diff_ns / 1000000;
-        timeout.tv_usec = (unsigned) diff_ns % 1000000;
+    timeout.tv_sec = (unsigned) quic_engine_ref->program_args.timeout_ms / 1000;
+    timeout.tv_usec = (unsigned) quic_engine_ref->program_args.timeout_ms % 1000;
 
-        event_add(quic_engine_ref->events.event_time_ref, &timeout);
-    }
-    //clean_connections(quic_engine_ref->connections);
+    // timeout refreshes even if the previous one has not expired
+    event_add(quic_engine_ref->events.event_timeout_ref, &timeout);
 };
+
+void on_timeout(quic_engine_parameters* quic_engine_ref){
+    // no streams => no timeout
+    if (quic_engine_ref->reading_streams_count == 0)
+        return;
+
+    run_timeout(quic_engine_ref);
+}
 
 void timer_handler (int fd, short what, void *arg)
 {
     quic_engine_parameters* quic_engine_ref = (quic_engine_parameters*)arg;
-    schedule_engine(quic_engine_ref);
+    on_timeout(quic_engine_ref);
+    lsquic_engine_process_conns(quic_engine_ref->engine_ref);
+    event_base_loopbreak(quic_engine_ref->events.event_base_ref);
+    if (get_stack_length(quic_engine_ref->output_stack_ref) == 0)
+    {
+        while(quic_engine_ref->reading_streams_count > 0)
+        {
+            report_engine_error(init_text_from_const("timeout without connections"), 0, quic_engine_ref,
+                                init_text_from_const(__FILE__), __LINE__);
+            quic_engine_ref->reading_streams_count--;
+        }
+    }
+    //schedule_engine(quic_engine_ref);
 }
-
-#include "event_handlers.h"

@@ -3,7 +3,8 @@
 //
 
 #include <pthread.h>
-#include "quic_downloader.h"
+#include <string.h>
+#include "../include/quic_downloader.h"
 #include "quic_engine_holder.h"
 #include "connection_establisher.h"
 #include "cycle_buffer.h"
@@ -13,44 +14,48 @@
  * engine_ref_out - empty instance for memory allocation simplification
  * quic_args_ref - quic engine parameters for creation
  */
-void create_client(quic_engine_parameters* engine_ref_out, quic_args* quic_args_ref)
+int create_client(quic_engine_parameters** engine_parameters_ref, quic_args* quic_args_ref)
 {
-    engine_ref_out->program_args = *quic_args_ref;
-    init_engine(engine_ref_out);
+    *engine_parameters_ref = malloc(sizeof(quic_engine_parameters));
+    (*engine_parameters_ref)->program_args = *quic_args_ref;
+    if (init_engine(*engine_parameters_ref) == -1){
+        return -1;
+    }
+    return 0;
 }
 void destroy_client(quic_engine_parameters* engine_ref_out)
 {
     destroy_engine(engine_ref_out);
+    free(engine_ref_out);
 }
 
-void *thread_event_loop(void* event_base)
+int start_downloading(quic_engine_parameters* engine_ref, struct download_request* requests, int request_count)
 {
-    event_base_loop((struct event_base*)event_base, 0);
-    return NULL;
-}
-
-void start_loop(pthread_t* thread_ref, struct event_base* event_base_ref)
-{
-    // test
-    thread_event_loop(event_base_ref);
-    int a = 10;
-//    if (*thread_ref != NULL)
-//        pthread_exit(thread_ref);
-//    pthread_create(thread_ref, NULL, thread_event_loop, event_base_ref);
-}
-
-void start_downloading(quic_engine_parameters* engine_ref, const struct url* urls, int url_count)
-{
-    reset_memory_buffer_allocations(&engine_ref->output_result_buffer, url_count);
-    for(int i = 0; i < url_count; i++)
-        quic_connect(engine_ref, urls[i].url_data);
+    for(int i = 0; i < request_count; i++)
+    {
+        text_t* url = init_text(requests[i].url_request.url_data, requests[i].url_request.url_len);
+        struct timespec time_now;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &time_now);
+        charge_request(engine_ref, &requests[i], url, time_now);
+    }
     schedule_engine(engine_ref);
-    start_loop(&engine_ref->loop_thread, engine_ref->events.event_base_ref);
+    return 0;
 }
 
 struct output_data* get_download_result(quic_engine_parameters* engine_ref)
 {
-    return (struct output_data*) pull_stack_element(engine_ref->output_stack_ref);
+    void* result = pull_stack_element(engine_ref->output_stack_ref);
+    if (result != NULL)
+        return (struct output_data*)result;
+
+    if ((engine_ref->reading_streams_count == 0) && (engine_ref->request_queue->length == 0))
+        return result;
+
+    event_base_loop(engine_ref->events.event_base_ref, 0);
+    result = pull_stack_element(engine_ref->output_stack_ref);
+    if (result == NULL)
+        return NULL;
+    return (struct output_data*) result;
 }
 
 

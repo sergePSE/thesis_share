@@ -15,7 +15,7 @@
 
 #include "engine_structs.h"
 
-void init_engine(quic_engine_parameters* quic_engine_ref);
+int init_engine(quic_engine_parameters* quic_engine_ref);
 void destroy_engine(quic_engine_parameters* quic_engine_ref);
 
 #endif /* SRC_QUIC_ENGINE_HOLDER_H_ */
