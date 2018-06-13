@@ -1,0 +1,1 @@
+/usr/bin/cc  -Wall -Wextra -Wno-unused-parameter -g   CMakeFiles/quic_probe.dir/src/main.c.o  -o quic_probe  -L/home/sergei/Documents/git/lsquic-client/src/liblsquic  -L/usr/local/lib -Wl,-rpath,/home/sergei/Documents/git/lsquic-client/src/liblsquic:/usr/local/lib libquic_client.a -llsquic -levent -lpthread -lssl -lcrypto -lz -lm 
