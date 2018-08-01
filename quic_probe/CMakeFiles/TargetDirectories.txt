@@ -1,4 +1,0 @@
-/home/sergei/Documents/git/2018-sergey-masters-thesis/eclipse/quic_probe/CMakeFiles/rebuild_cache.dir
-/home/sergei/Documents/git/2018-sergey-masters-thesis/eclipse/quic_probe/CMakeFiles/quic_probe.dir
-/home/sergei/Documents/git/2018-sergey-masters-thesis/eclipse/quic_probe/CMakeFiles/edit_cache.dir
-/home/sergei/Documents/git/2018-sergey-masters-thesis/eclipse/quic_probe/CMakeFiles/quic_client.dir
